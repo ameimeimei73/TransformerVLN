@@ -39,7 +39,7 @@ class CustomT5Model(nn.Module):
         action = torch.LongTensor(self.model_actions.index('<start>'))
         img_feature = env.step(action)
         decoder_input = torch.cat((action, img_feature), 2)
-        attention_mask = None
+        attention_mask = torch.ones_like(instruction_ids)
 
         cur_step = 0
         output_action_seq = [action]
