@@ -8,6 +8,7 @@ class CustomT5Model(nn.Module):
 
         self.num_labels = action_size
         self.base_model = T5Model.from_pretrained('t5-small')  # small for test, should change to base
+        self.model_actions = ['left', 'right', 'up', 'down', 'forward', '<end>', '<start>', '<ignore>']
 
         # Change beam search to greedy search
         self.base_model.config.num_beams = 1
@@ -32,6 +33,37 @@ class CustomT5Model(nn.Module):
         predictions = torch.argmax(probs, dim=2)
 
         return predictions
+
+    def test(self, env, instruction_ids, max_steps):
+        env.reset()
+        action = torch.LongTensor(self.model_actions.index('<start>'))
+        img_feature = env.step(action)
+        decoder_input = torch.cat((action, img_feature), 2)
+        attention_mask = None
+
+        cur_step = 0
+        output_action_seq = [action]
+        # stop until reaches max step limits or model outputs <end> action
+        while cur_step < max_steps and action is not self.model_actions.index('<end>'):
+            output = self.base_model(
+                instruction_ids,
+                attention_mask=attention_mask,
+                output_hidden_states=True,
+                decoder_inputs_embeds=decoder_input
+            )
+
+            hidden_states = output['last_hidden_state']
+            action_prob = self.dense(hidden_states).softmax(dim=2)
+            action = action_prob.argmax(dim=2)
+            img_feature = env.step(action)
+            next_input = torch.cat((action, img_feature), dim=2)
+            decoder_input = torch.cat((decoder_input, next_input), dim=1)
+
+            output_action_seq.append(action)
+            cur_step += 1
+
+        return output_action_seq
+
 
 def main():
     model = CustomT5Model(8, 1024)
