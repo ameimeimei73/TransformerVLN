@@ -47,7 +47,7 @@ class BaseAgent(object):
         # We rely on env showing the entire batch before repeating anything
         looped = False
         while True:
-            for traj in self.our_rollout():
+            for traj in self.teacher_rollout():
                 if traj['instr_id'] in self.results:
                     looped = True
                 else:
