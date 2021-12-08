@@ -1,0 +1,9 @@
+torch
+torchvision
+numpy
+networkX==2.2
+tensorboardX
+tqdm
+stanza
+nltk
+transformers
