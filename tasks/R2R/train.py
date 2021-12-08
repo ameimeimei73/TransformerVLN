@@ -13,7 +13,7 @@ from collections import defaultdict
 
 from utils import read_vocab,write_vocab,build_vocab,Tokenizer,padding_idx,timeSince
 from env import R2RBatch
-from model import EncoderLSTM, AttnDecoderLSTM, T5_Model
+from model import T5_Model
 from agent import Seq2SeqAgent
 from eval import Evaluation
 
