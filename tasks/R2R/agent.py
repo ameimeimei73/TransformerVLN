@@ -403,7 +403,7 @@ class Seq2SeqAgent(BaseAgent):
         self.losses = []
         for iter in range(1, n_iters + 1):
             optimizer.zero_grad()
-            self._rolloutteacher_rollout(optimizer)
+            self.teacher_rollout()
             # self.our_rollout(optimizer)
             self.loss.backward()
             optimizer.step()
