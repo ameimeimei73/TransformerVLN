@@ -10,8 +10,9 @@ import time
 import numpy as np
 import pandas as pd
 from collections import defaultdict
-
-from utils import read_vocab,write_vocab,build_vocab,Tokenizer,padding_idx,timeSince
+from transformers import T5Tokenizer
+# from utils import read_vocab,write_vocab,build_vocab,Tokenizer,padding_idx,timeSince
+from utils import timeSince
 from env import R2RBatch
 from model import T5_Model
 from agent import Seq2SeqAgent
@@ -35,12 +36,15 @@ action_embedding_size = 32
 hidden_size = 512
 bidirectional = False
 dropout_ratio = 0.5
-feedback_method = 'sample' # teacher or sample
+feedback_method = 'sample'  # teacher or sample
 learning_rate = 0.001
 weight_decay = 0.0005
 n_iters = 5000 if feedback_method == 'teacher' else 20000
 model_prefix = 'seq2seq_%s_imagenet' % (feedback_method)
 
+tok = T5Tokenizer.from_pretrained("t5-small")
+tok.padding_side = "right"
+padding_idx = tok.pad_token_id
 
 def train(train_env, model, n_iters, log_every=100, val_envs={}):
     ''' Train on training set, validating on both seen and unseen. '''
@@ -106,10 +110,10 @@ def setup():
     torch.manual_seed(1)
     torch.cuda.manual_seed(1)
     # Check for vocabs
-    if not os.path.exists(TRAIN_VOCAB):
-        write_vocab(build_vocab(splits=['train']), TRAIN_VOCAB)
-    if not os.path.exists(TRAINVAL_VOCAB):
-        write_vocab(build_vocab(splits=['train','val_seen','val_unseen']), TRAINVAL_VOCAB)
+    # if not os.path.exists(TRAIN_VOCAB):
+    #     write_vocab(build_vocab(splits=['train']), TRAIN_VOCAB)
+    # if not os.path.exists(TRAINVAL_VOCAB):
+    #     write_vocab(build_vocab(splits=['train','val_seen','val_unseen']), TRAINVAL_VOCAB)
 
 
 def test_submission():
@@ -117,8 +121,8 @@ def test_submission():
 
     setup()
     # Create a batch training environment that will also preprocess text
-    vocab = read_vocab(TRAINVAL_VOCAB)
-    tok = Tokenizer(vocab=vocab, encoding_length=MAX_INPUT_LENGTH)
+    # vocab = read_vocab(TRAINVAL_VOCAB)
+    # tok = Tokenizer(vocab=vocab, encoding_length=MAX_INPUT_LENGTH)
     train_env = R2RBatch(features, batch_size=batch_size, splits=['train', 'val_seen', 'val_unseen'], tokenizer=tok)
 
     # Build models and train
@@ -142,8 +146,8 @@ def train_val():
 
     setup()
     # Create a batch training environment that will also preprocess text
-    vocab = read_vocab(TRAIN_VOCAB)
-    tok = Tokenizer(vocab=vocab, encoding_length=MAX_INPUT_LENGTH)
+    # vocab = read_vocab(TRAIN_VOCAB)
+    # tok = Tokenizer(vocab=vocab, encoding_length=MAX_INPUT_LENGTH)
     train_env = R2RBatch(features, batch_size=batch_size, splits=['train'], tokenizer=tok)
 
     # Creat validation environments
