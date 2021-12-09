@@ -12,7 +12,7 @@ import pandas as pd
 from collections import defaultdict
 from transformers import T5Tokenizer
 # from utils import read_vocab,write_vocab,build_vocab,Tokenizer,padding_idx,timeSince
-from utils import timeSince
+from utils import padding_idx, timeSince
 from env import R2RBatch
 from model import T5_Model
 from agent import Seq2SeqAgent
@@ -42,10 +42,13 @@ weight_decay = 0.0005
 n_iters = 5000 if feedback_method == 'teacher' else 20000
 model_prefix = 'seq2seq_%s_imagenet' % (feedback_method)
 
+print(padding_idx)
+
 tok = T5Tokenizer.from_pretrained("t5-small")
 tok.padding_side = "right"
 padding_idx = tok.pad_token_id
 
+print(padding_idx)
 def train(train_env, model, n_iters, log_every=100, val_envs={}):
     ''' Train on training set, validating on both seen and unseen. '''
 
