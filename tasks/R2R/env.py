@@ -116,7 +116,7 @@ class R2RBatch():
                 new_item['instr_id'] = '%s_%d' % (item['path_id'], j)
                 new_item['instructions'] = instr
                 if tokenizer:
-                    new_item['instr_encoding'] = tokenizer(instr)
+                    new_item['instr_encoding'] = tokenizer(instr)['input_ids']
                 self.data.append(new_item)
         self.scans = set(self.scans)
         self.splits = splits
