@@ -29,15 +29,15 @@ IMAGENET_FEATURES = 'img_features/ResNet-152-imagenet.tsv'
 MAX_INPUT_LENGTH = 80
 
 features = IMAGENET_FEATURES
-batch_size = 2
+batch_size = 32
 max_episode_len = 20
 word_embedding_size = 256
 action_embedding_size = 32
 hidden_size = 512
 bidirectional = False
 dropout_ratio = 0.5
-feedback_method = 'sample'  # teacher or sample
-learning_rate = 0.001
+feedback_method = 'teacher'  # teacher or sample
+learning_rate = 0.0001
 weight_decay = 0.0005
 n_iters = 5000 if feedback_method == 'teacher' else 20000
 model_prefix = 'seq2seq_%s_imagenet' % (feedback_method)
