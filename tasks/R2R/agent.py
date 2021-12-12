@@ -303,7 +303,7 @@ class Seq2SeqAgent(BaseAgent):
         # img_inputs = torch.stack(batch_img).reshape(batch_size, len(batch_img), -1)
         # logits = self.model(seq.cuda(), seq_mask.cuda(), img_inputs.cuda())
         self.loss = self.criterion(logits.reshape(batch_size * len(gt_actions), -1),
-                                   (torch.stack(gt_actions)))
+                                   torch.flatten(torch.stack(gt_actions)))
         self.losses.append(self.loss.item())
 
         # self.losses.append(self.loss.item() / self.episode_len)
