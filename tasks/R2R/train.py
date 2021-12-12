@@ -71,6 +71,13 @@ def train(train_env, model, n_iters, log_every=100, val_envs={}):
         data_log['train loss'].append(train_loss_avg)
         loss_str = 'train loss: %.4f' % train_loss_avg
 
+        print('interation: idx')
+        print('decoder input parameters:')
+        print(model.decoder_input.weight)
+        print(model.decoder_input.bias)
+        print('output layer parameters:')
+        print(model.dense.weight)
+        print(model.dense.bias)
         # Run validation
         for env_name, (env, evaluator) in val_envs.items():
             agent.env = env
