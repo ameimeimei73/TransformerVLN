@@ -23,7 +23,7 @@ padding_idx = tok.pad_token_id
 class BaseAgent(object):
     ''' Base class for an R2R agent to generate and save trajectories. '''
 
-    def __init__(self, env, ss_path):
+    def __init__(self, env, results_path):
         self.env = env
         self.results_path = results_path
         random.seed(1)
@@ -303,7 +303,7 @@ class Seq2SeqAgent(BaseAgent):
         # img_inputs = torch.stack(batch_img).reshape(batch_size, len(batch_img), -1)
         # logits = self.model(seq.cuda(), seq_mask.cuda(), img_inputs.cuda())
         self.loss = self.criterion(logits.reshape(batch_size * len(gt_actions), -1),
-                                   torch.flatten(torch.stack(gt_actions)))
+                                   (torch.stack(gt_actions)))
         self.losses.append(self.loss.item())
 
         # self.losses.append(self.loss.item() / self.episode_len)
