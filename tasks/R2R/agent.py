@@ -241,72 +241,82 @@ class Seq2SeqAgent(BaseAgent):
         # env action for interacting with environment
         self.loss = 0
         env_action = [None] * batch_size
-        self.model.eval()
-        for i in range(self.episode_len):
-            f_t = self._feature_variable(perm_obs)  # Image features from obs
-            batch_img.append(f_t)
 
+        # training process
+        if self.feedback == 'teacher':
+            # get ground truth image features and actions
+            for i in range(self.episode_len):
+                f_t = self._feature_variable(perm_obs)  # Image features from obs
+                batch_img.append(f_t)
+                target = self._teacher_action(perm_obs, ended)
+                gt_actions.append(target)
+
+                a_t = target
+                for i, idx in enumerate(perm_idx):
+                    action_idx = a_t[i].item()
+                    if action_idx == self.model_actions.index('<end>'):
+                        ended[i] = True
+                    env_action[idx] = self.env_actions[action_idx]
+
+                # update env
+                obs = np.array(self.env.step(env_action))
+                perm_obs = obs[perm_idx]
+
+                # Early exit if all ended
+                if ended.all():
+                    break
+
+            self.model.train()
             img_inputs = torch.stack(batch_img, dim=1).reshape(batch_size, len(batch_img), -1)
             logits = self.model(seq.cuda(), seq_mask.cuda(), img_inputs.cuda())  # [bs, action_len, 6]
-            logits_t = logits[:, i]  # predicted action in current time step, [bs, 6]
+            # print (logits.shape)
+            self.loss = self.criterion(logits.reshape(batch_size * len(gt_actions), -1),
+                                       torch.flatten(torch.stack(gt_actions)))
+            self.losses.append(self.loss.item())
+        # evaluation / test
+        elif self.feedback == 'argmax':
+            self.model.eval()
+            for i in range(self.episode_len):
+                f_t = self._feature_variable(perm_obs)  # Image features from obs
+                batch_img.append(f_t)
 
-            # Supervised training
-            target = self._teacher_action(perm_obs, ended)
-            gt_actions.append(target)
+                img_inputs = torch.stack(batch_img, dim=1).reshape(batch_size, len(batch_img), -1)
+                logits = self.model(seq.cuda(), seq_mask.cuda(), img_inputs.cuda())  # [bs, action_len, 6]
+                logits_t = logits[:, i]  # predicted action in current time step, [bs, 6]
 
-            # loss_t =  self.criterion(logits_t, target)
-            # self.loss += loss_t
-            # if optimizer:
-            #    loss_t.backward()
-            #    optimizer.step()
+                # Supervised training
+                # target = self._teacher_action(perm_obs, ended)
+                # gt_actions.append(target)
 
-            # Mask outputs where agent can't move forward
-            for i, ob in enumerate(perm_obs):
-                if len(ob['navigableLocations']) <= 1:
-                    logits_t[i, self.model_actions.index('forward')] = -float('inf')
+                # Mask outputs where agent can't move forward
+                for i, ob in enumerate(perm_obs):
+                    if len(ob['navigableLocations']) <= 1:
+                        logits_t[i, self.model_actions.index('forward')] = -float('inf')
 
-            # Determine next model inputs (student forcing)
-            if self.feedback == 'teacher':
-                a_t = target
-            elif self.feedback == 'argmax':
+                # argmax - next action
                 _, a_t = logits_t.max(1)
                 a_t = a_t.detach()
-            elif self.feedback == 'sample':
-                probs = F.softmax(logits_t, dim=1)
-                m = D.Categorical(probs)
-                a_t = m.sample()
 
                 # Updated 'ended' list and make environment action
-            for i, idx in enumerate(perm_idx):
-                action_idx = a_t[i].item()
-                if action_idx == self.model_actions.index('<end>'):
-                    ended[i] = True
-                env_action[idx] = self.env_actions[action_idx]
+                for i, idx in enumerate(perm_idx):
+                    action_idx = a_t[i].item()
+                    if action_idx == self.model_actions.index('<end>'):
+                        ended[i] = True
+                    env_action[idx] = self.env_actions[action_idx]
 
-            # update env
-            obs = np.array(self.env.step(env_action))
-            perm_obs = obs[perm_idx]
+                # update env
+                obs = np.array(self.env.step(env_action))
+                perm_obs = obs[perm_idx]
 
-            # Save trajectory output
-            for i, ob in enumerate(perm_obs):
-                if not ended[i]:
-                    traj[i]['path'].append((ob['viewpoint'], ob['heading'], ob['elevation']))
+                # Save trajectory output
+                for i, ob in enumerate(perm_obs):
+                    if not ended[i]:
+                        traj[i]['path'].append((ob['viewpoint'], ob['heading'], ob['elevation']))
 
-            # Early exit if all ended
-            if ended.all():
-                break
+                # Early exit if all ended
+                if ended.all():
+                    break
 
-        self.model.train()
-        img_inputs = torch.stack(batch_img, dim=1).reshape(batch_size, len(batch_img), -1)
-        logits = self.model(seq.cuda(), seq_mask.cuda(), img_inputs.cuda())  # [bs, action_len, 6]
-        # print (logits.shape)
-        # img_inputs = torch.stack(batch_img).reshape(batch_size, len(batch_img), -1)
-        # logits = self.model(seq.cuda(), seq_mask.cuda(), img_inputs.cuda())
-        self.loss = self.criterion(logits.reshape(batch_size * len(gt_actions), -1),
-                                   torch.flatten(torch.stack(gt_actions)))
-        self.losses.append(self.loss.item())
-
-        # self.losses.append(self.loss.item() / self.episode_len)
         return traj
 
     def test(self, use_dropout=False, feedback='argmax', allow_cheat=False):
