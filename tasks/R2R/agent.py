@@ -173,10 +173,10 @@ class Seq2SeqAgent(BaseAgent):
         # Sort sequences by lengths
         seq_lengths, perm_idx = seq_lengths.sort(0, True)
         sorted_tensor = seq_tensor[perm_idx]
-        mask = (sorted_tensor == padding_idx)[:,:seq_lengths[0]]
+        mask = (sorted_tensor != padding_idx)[:,:seq_lengths[0]]
 
         return Variable(sorted_tensor, requires_grad=False).long().cuda(), \
-               1 - mask.byte().cuda(), \
+               mask.byte().cuda(), \
                list(seq_lengths), list(perm_idx)
 
     def _feature_variable(self, obs):
@@ -320,8 +320,6 @@ class Seq2SeqAgent(BaseAgent):
             gt_actions.append(a_t_em)
             img_inputs = torch.stack(batch_img, dim=1).reshape(batch_size, len(batch_img), -1)
             at_input = torch.stack(gt_actions, dim=1).reshape(batch_size, len(gt_actions), -1)
-            print(img_inputs.shape)
-            print(at_input.shape)
             logits = self.model(seq.cuda(), seq_mask.cuda(), at_input.cuda(), img_inputs.cuda())  # batch size * seq size * num of action
             logits_t = logits[:, t]
 

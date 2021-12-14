@@ -25,18 +25,13 @@ class CustomT5Model(nn.Module):
     def forward(self, input_ids, attn_mask, actions, image_features):
         # Create decoder input embedding
         concat_input = torch.cat((actions, image_features), 2)
-        print('concate results shape')
-        print(concat_input.shape)
         decoder_emb = self.decoder_input(concat_input)
-        print('linear over')
-        print(decoder_emb.shape)
         output = self.base_model(
             input_ids,
             attention_mask=attn_mask,
             output_hidden_states=True,
             decoder_inputs_embeds=decoder_emb)
-        
-        print('t5 over')
+
         hidden_states = output['last_hidden_state']
         logits = self.dense(hidden_states)
 
