@@ -16,7 +16,7 @@ import torch.nn.functional as F
 from transformers import T5Tokenizer
 from env import R2RBatch
 from utils import padding_idx
-tok = T5Tokenizer.from_pretrained("t5-base")
+tok = T5Tokenizer.from_pretrained("t5-small")
 padding_idx = tok.pad_token_id
 
 class BaseAgent(object):

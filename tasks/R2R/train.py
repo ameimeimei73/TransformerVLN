@@ -42,7 +42,7 @@ weight_decay = 0.0005
 n_iters = 5000 if feedback_method == 'teacher' else 20000
 model_prefix = 'seq2seq_%s_imagenet' % (feedback_method)
 
-tok = T5Tokenizer.from_pretrained("t5-base")
+tok = T5Tokenizer.from_pretrained("t5-small")
 tok.padding_side = "right"
 padding_idx = tok.pad_token_id
 

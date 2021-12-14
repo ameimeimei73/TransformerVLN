@@ -13,7 +13,7 @@ class CustomT5Model(nn.Module):
 
         self.num_labels = output_action_size
         self.input_action_size = input_action_size
-        self.base_model = T5Model.from_pretrained('t5-base')  # small for test, should change to base
+        self.base_model = T5Model.from_pretrained('t5-small')  # small for test, should change to base
 
         # Change beam search to greedy search
         self.base_model.config.num_beams = 1
