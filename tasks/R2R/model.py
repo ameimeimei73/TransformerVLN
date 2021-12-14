@@ -14,7 +14,6 @@ class CustomT5Model(nn.Module):
         self.num_labels = output_action_size
         self.input_action_size = input_action_size
         self.base_model = T5Model.from_pretrained('t5-base')  # small for test, should change to base
-        self.model_actions = ['left', 'right', 'up', 'down', 'forward', '<end>', '<start>', '<ignore>']
 
         # Change beam search to greedy search
         self.base_model.config.num_beams = 1
@@ -30,12 +29,13 @@ class CustomT5Model(nn.Module):
         print(concat_input.shape)
         decoder_emb = self.decoder_input(concat_input)
         print('linear over')
+        print(decoder_emb.shape)
         output = self.base_model(
             input_ids,
             attention_mask=attn_mask,
             output_hidden_states=True,
-            decoder_inputs_embeds=decoder_emb
-        )
+            decoder_inputs_embeds=decoder_emb)
+        
         print('t5 over')
         hidden_states = output['last_hidden_state']
         logits = self.dense(hidden_states)
