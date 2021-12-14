@@ -320,6 +320,8 @@ class Seq2SeqAgent(BaseAgent):
             gt_actions.append(a_t_em)
             img_inputs = torch.stack(batch_img, dim=1).reshape(batch_size, len(batch_img), -1)
             at_input = torch.stack(gt_actions, dim=1).reshape(batch_size, len(gt_actions), -1)
+            print(img_inputs.shape)
+            print(at_input.shape)
             logits = self.model(seq.cuda(), seq_mask.cuda(), at_input.cuda(), img_inputs.cuda())  # batch size * seq size * num of action
             logits_t = logits[:, t]
 
