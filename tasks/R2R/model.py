@@ -35,9 +35,8 @@ class CustomT5Model(nn.Module):
 
         hidden_states = output['last_hidden_state']
         logits = self.dense(hidden_states)
-        probs = torch.nn.functional.softmax(logits, dim=2)
 
-        return probs
+        return logits
 
 class T5_Model(nn.Module):
     def __init__(self, input_action_size, output_action_size, image_feature_size):

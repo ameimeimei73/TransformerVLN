@@ -13,7 +13,7 @@ import torch.distributions as D
 from torch.autograd import Variable
 from torch import optim
 import torch.nn.functional as F
-
+from transformers import T5Tokenizer
 from env import R2RBatch
 from utils import padding_idx
 tok = T5Tokenizer.from_pretrained("t5-base")
@@ -176,7 +176,7 @@ class Seq2SeqAgent(BaseAgent):
         mask = (sorted_tensor == padding_idx)[:,:seq_lengths[0]]
 
         return Variable(sorted_tensor, requires_grad=False).long().cuda(), \
-               mask.byte().cuda(), \
+               1 - mask.byte().cuda(), \
                list(seq_lengths), list(perm_idx)
 
     def _feature_variable(self, obs):
