@@ -304,7 +304,7 @@ class Seq2SeqAgent(BaseAgent):
         a_t = Variable(torch.ones(batch_size).long() * self.model_actions.index('<start>'),
                     requires_grad=False).cuda()
         ended = np.array([False] * batch_size) # Indices match permuation of the model, not env
-        a_t_em = torch.zeros(batch_size, self.model.num_labels).long()
+        a_t_em = torch.zeros(batch_size, self.model.input_action_size).long()
         a_t_em[:, self.model_actions.index('<start>')] = 1
         # global action and image tensor
         gt_actions = []
@@ -347,7 +347,7 @@ class Seq2SeqAgent(BaseAgent):
 
             # Updated 'ended' list and make environment action
             # updated action embeddings
-            a_t_em = torch.zeros(batch_size, self.model.num_labels).long()
+            a_t_em = torch.zeros(batch_size, self.model.input_action_size).long()
             for i, idx in enumerate(perm_idx):
                 action_idx = a_t[i].item()
                 a_t_em[i, action_idx] = 1
