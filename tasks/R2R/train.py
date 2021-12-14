@@ -14,7 +14,7 @@ from transformers import T5Tokenizer
 # from utils import read_vocab,write_vocab,build_vocab,Tokenizer,padding_idx,timeSince
 from utils import padding_idx, timeSince
 from env import R2RBatch
-from model import T5_Model
+from model import CustomT5Model
 from agent import Seq2SeqAgent
 from eval import Evaluation
 
@@ -42,7 +42,7 @@ weight_decay = 0.0005
 n_iters = 5000 if feedback_method == 'teacher' else 20000
 model_prefix = 'seq2seq_%s_imagenet' % (feedback_method)
 
-tok = T5Tokenizer.from_pretrained("t5-small")
+tok = T5Tokenizer.from_pretrained("t5-base")
 tok.padding_side = "right"
 padding_idx = tok.pad_token_id
 
@@ -71,13 +71,6 @@ def train(train_env, model, n_iters, log_every=100, val_envs={}):
         data_log['train loss'].append(train_loss_avg)
         loss_str = 'train loss: %.4f' % train_loss_avg
 
-        print('interation: idx')
-        print('decoder input parameters:')
-        print(model.decoder_input.weight)
-        print(model.decoder_input.bias)
-        print('output layer parameters:')
-        print(model.dense.weight)
-        print(model.dense.bias)
         # Run validation
         for env_name, (env, evaluator) in val_envs.items():
             agent.env = env
@@ -171,7 +164,7 @@ def train_val():
     '''
     # input1: action number, input2: action number-2, input3: image feature dimension
     print ("Build T5 model ...")
-    model = T5_Model(Seq2SeqAgent.n_inputs(), Seq2SeqAgent.n_outputs(), 2048)
+    model = CustomT5Model(Seq2SeqAgent.n_inputs(), Seq2SeqAgent.n_outputs(), 2048)
     train(train_env, model, n_iters, val_envs=val_envs)
 
 
