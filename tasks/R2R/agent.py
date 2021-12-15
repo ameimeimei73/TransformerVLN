@@ -16,6 +16,7 @@ import torch.nn.functional as F
 from transformers import T5Tokenizer
 from env import R2RBatch
 from utils import padding_idx
+
 tok = T5Tokenizer.from_pretrained("t5-small")
 padding_idx = tok.pad_token_id
 
@@ -173,7 +174,7 @@ class Seq2SeqAgent(BaseAgent):
         # Sort sequences by lengths
         seq_lengths, perm_idx = seq_lengths.sort(0, True)
         sorted_tensor = seq_tensor[perm_idx]
-        mask = (sorted_tensor != padding_idx)[:,:seq_lengths[0]]
+        mask = (sorted_tensor != padding_idx)
 
         return Variable(sorted_tensor, requires_grad=False).long().cuda(), \
                mask.byte().cuda(), \
@@ -283,12 +284,13 @@ class Seq2SeqAgent(BaseAgent):
         return traj
 
     def t5_rollout(self):
-        print('t_5')
         obs = np.array(self.env.reset())
         batch_size = len(obs)
 
         # Reorder the language input for the encoder
         seq, seq_mask, seq_lengths, perm_idx = self._sort_batch(obs)
+        print(seq)
+        print(seq_mask)
         perm_obs = obs[perm_idx]
 
         # Record starting point

@@ -18,13 +18,13 @@ class CustomT5Model(nn.Module):
         # Change beam search to greedy search
         self.base_model.config.num_beams = 1
         self.decoder_input = nn.Linear(in_features=self.input_action_size + image_feature_size, out_features=512)
-        print('fc input size')
-        print(self.input_action_size + image_feature_size)
         self.dense = nn.Linear(in_features=512, out_features=self.num_labels)
+        # self.relu = nn.ReLU()
 
     def forward(self, input_ids, attn_mask, actions, image_features):
         # Create decoder input embedding
         concat_input = torch.cat((actions, image_features), 2)
+        # decoder_emb = self.relu(self.decoder_input(concat_input))
         decoder_emb = self.decoder_input(concat_input)
         output = self.base_model(
             input_ids,
