@@ -18,7 +18,7 @@ from model import CustomT5Model
 from agent import Seq2SeqAgent
 from eval import Evaluation
 
-
+torch.cuda.empty_cache()
 TRAIN_VOCAB = 'tasks/R2R/data/train_vocab.txt'
 TRAINVAL_VOCAB = 'tasks/R2R/data/trainval_vocab.txt'
 RESULT_DIR = 'tasks/R2R/results/'
