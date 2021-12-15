@@ -13,12 +13,12 @@ class CustomT5Model(nn.Module):
 
         self.num_labels = output_action_size
         self.input_action_size = input_action_size
-        self.base_model = T5Model.from_pretrained('t5-small')  # small for test, should change to base
+        self.base_model = T5Model.from_pretrained('t5-base')  # small for test, should change to base
 
         # Change beam search to greedy search
         self.base_model.config.num_beams = 1
-        self.decoder_input = nn.Linear(in_features=self.input_action_size + image_feature_size, out_features=512)
-        self.dense = nn.Linear(in_features=512, out_features=self.num_labels)
+        self.decoder_input = nn.Linear(in_features=self.input_action_size + image_feature_size, out_features=768)
+        self.dense = nn.Linear(in_features=768, out_features=self.num_labels)
         # self.relu = nn.ReLU()
 
     def forward(self, input_ids, attn_mask, actions, image_features):
