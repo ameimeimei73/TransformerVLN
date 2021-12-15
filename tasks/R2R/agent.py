@@ -289,8 +289,6 @@ class Seq2SeqAgent(BaseAgent):
 
         # Reorder the language input for the encoder
         seq, seq_mask, seq_lengths, perm_idx = self._sort_batch(obs)
-        print(seq.shape)
-        print(seq_mask.shape)
         perm_obs = obs[perm_idx]
 
         # Record starting point
