@@ -13,9 +13,12 @@ import torch.distributions as D
 from torch.autograd import Variable
 from torch import optim
 import torch.nn.functional as F
-
+from transformers import T5Tokenizer, BertTokenizer
 from env import R2RBatch
-from utils import padding_idx
+from tqdm import tqdm
+
+tok = BertTokenizer.from_pretrained("bert-base-uncased")
+padding_idx = tok.pad_token_id
 
 class BaseAgent(object):
     ''' Base class for an R2R agent to generate and save trajectories. '''
@@ -40,21 +43,30 @@ class BaseAgent(object):
     def get_agent(name):
         return globals()[name+"Agent"]
 
-    def test(self):
+    def test(self, model_type):
         self.env.reset_epoch()
         self.losses = []
         self.results = {}
         # We rely on env showing the entire batch before repeating anything
-        #print('Testing %s' % self.__class__.__name__)
         looped = False
-        while True:
-            for traj in self.rollout():
-                if traj['instr_id'] in self.results:
-                    looped = True
-                else:
-                    self.results[traj['instr_id']] = traj['path']
-            if looped:
-                break
+        if model_type == 'BERT+FC':
+            while True:
+                for traj in self.bert_rollout():
+                    if traj['instr_id'] in self.results:
+                        looped = True
+                    else:
+                        self.results[traj['instr_id']] = traj['path']
+                if looped:
+                    break
+        elif model_type == 'BERT+LSTM':
+            while True:
+                for traj in self.bert_lstm_rollout():
+                    if traj['instr_id'] in self.results:
+                        looped = True
+                    else:
+                        self.results[traj['instr_id']] = traj['path']
+                if looped:
+                    break
 
 
 class StopAgent(BaseAgent):
@@ -142,10 +154,9 @@ class Seq2SeqAgent(BaseAgent):
     ]
     feedback_options = ['teacher', 'argmax', 'sample']
 
-    def __init__(self, env, results_path, encoder, decoder, episode_len=20):
+    def __init__(self, env, results_path, model, episode_len=20):
         super(Seq2SeqAgent, self).__init__(env, results_path)
-        self.encoder = encoder
-        self.decoder = decoder
+        self.model = model
         self.episode_len = episode_len
         self.losses = []
         self.criterion = nn.CrossEntropyLoss(ignore_index = self.model_actions.index('<ignore>'))
@@ -162,7 +173,9 @@ class Seq2SeqAgent(BaseAgent):
         ''' Extract instructions from a list of observations and sort by descending
             sequence length (to enable PyTorch packing). '''
 
+        # randomly select one instrument among three
         seq_tensor = np.array([ob['instr_encoding'] for ob in obs])
+        # print(seq_tensor)
         seq_lengths = np.argmax(seq_tensor == padding_idx, axis=1)
         seq_lengths[seq_lengths == 0] = seq_tensor.shape[1] # Full length
 
@@ -172,10 +185,11 @@ class Seq2SeqAgent(BaseAgent):
         # Sort sequences by lengths
         seq_lengths, perm_idx = seq_lengths.sort(0, True)
         sorted_tensor = seq_tensor[perm_idx]
-        mask = (sorted_tensor == padding_idx)[:,:seq_lengths[0]]
+
+        mask = (sorted_tensor == padding_idx)
 
         return Variable(sorted_tensor, requires_grad=False).long().cuda(), \
-               mask.byte().cuda(), \
+               1-mask.byte().cuda(), \
                list(seq_lengths), list(perm_idx)
 
     def _feature_variable(self, obs):
@@ -208,7 +222,7 @@ class Seq2SeqAgent(BaseAgent):
                 a[i] = self.model_actions.index('<end>')
         return Variable(a, requires_grad=False).cuda()
 
-    def rollout(self):
+    def bert_lstm_rollout(self):
         obs = np.array(self.env.reset())
         batch_size = len(obs)
 
@@ -220,16 +234,17 @@ class Seq2SeqAgent(BaseAgent):
         traj = [{
             'instr_id': ob['instr_id'],
             'path': [(ob['viewpoint'], ob['heading'], ob['elevation'])]
-        } for ob in perm_obs]
+            } for ob in perm_obs]
 
-        # Forward through encoder, giving initial hidden state and memory cell for decoder
-        # TODO: find out input shape
-        ctx,h_t,c_t = self.encoder(seq, seq_lengths)
+        # BERT encoder
+        ctx, h_t, c_t = self.model.encode(seq, seq_mask)
+        seq_mask = seq_mask[:,1:-1]
+
 
         # Initial action
         a_t = Variable(torch.ones(batch_size).long() * self.model_actions.index('<start>'),
-                    requires_grad=False).cuda()
-        ended = np.array([False] * batch_size) # Indices match permuation of the model, not env
+                requires_grad=False).cuda()
+        ended = np.array([False] * batch_size)
 
         # Do a sequence rollout and calculate the loss
         self.loss = 0
@@ -237,7 +252,8 @@ class Seq2SeqAgent(BaseAgent):
         for t in range(self.episode_len):
 
             f_t = self._feature_variable(perm_obs) # Image features from obs
-            h_t,c_t,alpha,logit = self.decoder(a_t.view(-1, 1), f_t, h_t, c_t, ctx, seq_mask)
+            h_t,c_t,alpha,logit = self.model.decode(a_t.view(-1, 1), f_t, h_t, c_t, ctx, seq_mask)
+
             # Mask outputs where agent can't move forward
             for i,ob in enumerate(perm_obs):
                 if len(ob['navigableLocations']) <= 1:
@@ -274,7 +290,6 @@ class Seq2SeqAgent(BaseAgent):
             for i,ob in enumerate(perm_obs):
                 if not ended[i]:
                     traj[i]['path'].append((ob['viewpoint'], ob['heading'], ob['elevation']))
-
             # Early exit if all ended
             if ended.all():
                 break
@@ -282,40 +297,126 @@ class Seq2SeqAgent(BaseAgent):
         self.losses.append(self.loss.item() / self.episode_len)
         return traj
 
-    def test(self, use_dropout=False, feedback='argmax', allow_cheat=False):
+
+    def bert_rollout(self, optimizer=None):
+        obs = np.array(self.env.reset())
+        batch_size = len(obs)
+
+        # Reorder the language input for the encoder
+        seq, seq_mask, seq_lengths, perm_idx = self._sort_batch(obs)
+        perm_obs = obs[perm_idx]
+
+        # get text embedding
+        text_embed = self.model.get_text_embedding(seq, seq_mask)  # [bs, 768]
+
+        # Record starting point
+        traj = [{'instr_id': ob['instr_id'],
+                'path': [(ob['viewpoint'], ob['heading'], ob['elevation'])]
+                } for ob in perm_obs]
+
+        # Our code for tearcher-forcing is here
+        # monitering stop
+        ended = np.array([False] * batch_size)  # Indices match permuation of the model, not env
+
+        # env action for interacting with environment
+        self.total_loss = 0
+        env_action = [None] * batch_size
+
+        # training
+        for t in range(self.episode_len):
+
+            f_t = self._feature_variable(perm_obs) # Image features from obs
+
+            if optimizer:
+                optimizer.zero_grad()
+
+            logit = self.model(text_embed, f_t)
+
+            # Mask outputs where agent can't move forward
+            for i,ob in enumerate(perm_obs):
+                if len(ob['navigableLocations']) <= 1:
+                    logit[i, self.model_actions.index('forward')] = -float('inf')
+
+            # Supervised training
+            target = self._teacher_action(perm_obs, ended)
+
+            self.loss = self.criterion(logit, target)
+            self.total_loss += self.loss.item()
+            if optimizer:
+                self.loss.backward()
+                optimizer.step()
+
+            # Supervised training
+            target = self._teacher_action(perm_obs, ended)
+
+            # Determine next model inputs
+            if self.feedback == 'teacher':
+                a_t = target                # teacher forcing
+            elif self.feedback == 'argmax':
+                _,a_t = logit.max(1)        # student forcing - argmax
+                a_t = a_t.detach()
+            else:
+                sys.exit('Invalid feedback option')
+
+            # Updated 'ended' list and make environment action
+            for i,idx in enumerate(perm_idx):
+                action_idx = a_t[i].item()
+                if action_idx == self.model_actions.index('<end>'):
+                    ended[i] = True
+                env_action[idx] = self.env_actions[action_idx]
+
+            obs = np.array(self.env.step(env_action))
+            perm_obs = obs[perm_idx]
+
+            # Save trajectory output
+            for i,ob in enumerate(perm_obs):
+                if not ended[i]:
+                    traj[i]['path'].append((ob['viewpoint'], ob['heading'], ob['elevation']))
+
+            # Early exit if all ended
+            if ended.all():
+                break
+
+        self.losses.append(self.total_loss / self.episode_len)
+        return traj
+
+
+    def test(self, use_dropout=False, feedback='argmax', allow_cheat=False, model_type=None):
         ''' Evaluate once on each instruction in the current environment '''
         if not allow_cheat: # permitted for purpose of calculating validation loss only
             assert feedback in ['argmax', 'sample'] # no cheating by using teacher at test time!
         self.feedback = feedback
         if use_dropout:
-            self.encoder.train()
-            self.decoder.train()
+            self.model.train()
         else:
-            self.encoder.eval()
-            self.decoder.eval()
-        super(Seq2SeqAgent, self).test()
+            self.model.eval()
+        super(Seq2SeqAgent, self).test(model_type=model_type)
 
-    def train(self, encoder_optimizer, decoder_optimizer, n_iters, feedback='teacher'):
+
+    def train(self, optimizer, n_iters, feedback='teacher', model_type=None):
         ''' Train for a given number of iterations '''
         assert feedback in self.feedback_options
         self.feedback = feedback
-        self.encoder.train()
-        self.decoder.train()
+        self.model.train()
         self.losses = []
-        for iter in range(1, n_iters + 1):
-            encoder_optimizer.zero_grad()
-            decoder_optimizer.zero_grad()
-            self.rollout()
-            self.loss.backward()
-            encoder_optimizer.step()
-            decoder_optimizer.step()
+
+        if model_type == 'BERT+FC':
+            for iter in tqdm(range(1, n_iters + 1)):
+                #optimizer.zero_grad()
+                self.bert_rollout(optimizer)
+                #self.loss.backward()
+                #optimizer.step()
+        elif model_type == 'BERT+LSTM':
+            for iter in tqdm(range(1, n_iters + 1)):
+                optimizer.zero_grad()
+                self.bert_lstm_rollout()
+                self.loss.backward()
+                optimizer.step()
 
     def save(self, encoder_path, decoder_path):
         ''' Snapshot models '''
-        torch.save(self.encoder.state_dict(), encoder_path)
-        torch.save(self.decoder.state_dict(), decoder_path)
+        torch.save(self.model.state_dict(), encoder_path)
 
     def load(self, encoder_path, decoder_path):
         ''' Loads parameters (but not training state) '''
-        self.encoder.load_state_dict(torch.load(encoder_path))
-        self.decoder.load_state_dict(torch.load(decoder_path))
+        self.model.load_state_dict(torch.load(encoder_path))

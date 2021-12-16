@@ -6,36 +6,10 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 from transformers import T5Model
+from transformers import BertModel
 
-class CustomT5Model(nn.Module):
-    def __init__(self, input_action_size, output_action_size, image_feature_size):
-        super(CustomT5Model, self).__init__()
-
-        self.num_labels = output_action_size
-        self.input_action_size = input_action_size
-        self.base_model = T5Model.from_pretrained('t5-base')  # small for test, should change to base
-
-        # Change beam search to greedy search
-        self.base_model.config.num_beams = 1
-        self.decoder_input = nn.Linear(in_features=self.input_action_size + image_feature_size, out_features=768)
-        self.dense = nn.Linear(in_features=768, out_features=self.num_labels)
-        # self.relu = nn.ReLU()
-
-    def forward(self, input_ids, attn_mask, actions, image_features):
-        # Create decoder input embedding
-        concat_input = torch.cat((actions, image_features), 2)
-        # decoder_emb = self.relu(self.decoder_input(concat_input))
-        decoder_emb = self.decoder_input(concat_input)
-        output = self.base_model(
-            input_ids,
-            attention_mask=attn_mask,
-            output_hidden_states=True,
-            decoder_inputs_embeds=decoder_emb)
-
-        hidden_states = output['last_hidden_state']
-        logits = self.dense(hidden_states)
-
-        return logits
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 
 class T5_Model(nn.Module):
     def __init__(self, input_action_size, output_action_size, image_feature_size):
@@ -64,6 +38,86 @@ class T5_Model(nn.Module):
         probs = torch.nn.functional.softmax(logits, dim=2)
 
         return probs
+
+class BERT_FC_Model(nn.Module):
+    def __init__(self, input_action_size, output_action_size, image_feature_size):
+        super(BERT_FC_Model, self).__init__()
+        self.num_labels = input_action_size
+        self.base_model = BertModel.from_pretrained("bert-base-uncased")
+
+        # freeze parameter
+        for param in self.base_model.parameters():
+            param.requires_grad = False
+
+        self.action_fcs = nn.Sequential(
+                        nn.Linear(768+2048, 128),
+                        nn.ReLU(),
+                        nn.Dropout(0.5),
+                        nn.Linear(128, output_action_size))
+
+        #self.img_fc = nn.Linear(image_feature_size, 128)
+        #self.pred_fc = nn.Linear(768, output_action_size)
+        #self.relu = nn.ReLU()
+
+        #torch.nn.init.xavier_uniform(self.img_fc.weight)
+        #torch.nn.init.xavier_uniform(self.pred_fc.weight)
+
+    def get_text_embedding(self, input_ids, attn_mask):
+        logits = self.base_model(input_ids=input_ids.cuda(), attention_mask=attn_mask.cuda())
+        cls_token = logits[0][:,0,:]
+        return cls_token
+
+    def forward(self, text_embed, image_features): 
+        concat_input = torch.cat((text_embed, image_features), 1)
+        logits = self.action_fcs(concat_input) # pos 0: [bs, 6]
+        return logits
+
+
+class BERT_LSTM_Model(nn.Module):
+    '''
+    BERT as encoder
+    LSTM as decoder
+    '''
+    def __init__(self, input_action_size, output_action_size, embedding_size, hidden_size, dropout_ratio, feature_size=2048):
+        super(BERT_LSTM_Model, self).__init__()
+        # encoder part
+        self.bert_model = BertModel.from_pretrained("bert-base-uncased")
+        # freeze model
+        for param in self.bert_model.parameters():
+            param.requires_grad = False
+
+        # decoder part
+        self.embedding_size = embedding_size
+        self.feature_size = feature_size
+        self.hidden_size = hidden_size
+        self.embedding = nn.Embedding(input_action_size, embedding_size)
+        self.drop = nn.Dropout(p=dropout_ratio)
+        self.lstm = nn.LSTMCell(embedding_size+feature_size, hidden_size)
+        self.attention_layer = SoftDotAttention(hidden_size)
+        self.decoder2action = nn.Linear(hidden_size, output_action_size)
+
+    def encode(self, input_ids, attn_mask):
+        logits = self.bert_model(input_ids=input_ids.cuda(), attention_mask=attn_mask.cuda())
+
+        h_t = logits[0][:,0,:]
+        c_t = logits[0][:,0,:]
+        ctx = logits[0][:,1:-1,:]
+        return ctx, h_t, c_t
+
+    def decode(self, action, feature, h_0, c_0, ctx, ctx_mask=None):
+        action_embeds = self.embedding(action)   # (batch, 1, embedding_size)
+        action_embeds = action_embeds.squeeze()
+
+        concat_input = torch.cat((action_embeds, feature), 1) # (batch, embedding_size+feature_size)
+        drop = self.drop(concat_input)
+        
+        h_1,c_1 = self.lstm(drop, (h_0,c_0))
+        h_1_drop = self.drop(h_1)
+
+        h_tilde, alpha = self.attention_layer(h_1_drop, ctx, ctx_mask)   
+
+        logit = self.decoder2action(h_tilde)
+        return h_1,c_1,alpha,logit
 
 class EncoderLSTM(nn.Module):
     ''' Encodes navigation instructions, returning hidden state context (for
@@ -146,10 +200,14 @@ class SoftDotAttention(nn.Module):
         context: batch x seq_len x dim
         mask: batch x seq_len indices to be masked
         '''
-        target = self.linear_in(h).unsqueeze(2)  # batch x dim x 1
 
+        target = self.linear_in(h).unsqueeze(2)  # batch x dim x 1
+        
         # Get attention
         attn = torch.bmm(context, target).squeeze(2)  # batch x seq_len
+     
+        mask = 1-mask # reverse mask in our model
+
         if mask is not None:
             # -Inf masking prior to the softmax 
             attn.data.masked_fill_(mask.bool(), -float('inf'))              

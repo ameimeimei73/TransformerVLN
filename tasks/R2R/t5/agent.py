@@ -17,7 +17,7 @@ from transformers import T5Tokenizer
 from env import R2RBatch
 from utils import padding_idx
 
-tok = T5Tokenizer.from_pretrained("t5-base")
+tok = T5Tokenizer.from_pretrained("t5-small")
 padding_idx = tok.pad_token_id
 
 class BaseAgent(object):
@@ -297,15 +297,13 @@ class Seq2SeqAgent(BaseAgent):
             'path': [(ob['viewpoint'], ob['heading'], ob['elevation'])]
         } for ob in perm_obs]
 
-        # Forward through encoder, giving initial hidden state and memory cell for decoder
-        # ctx,h_t,c_t = self.encoder(seq, seq_lengths)
-
         # Initial action
         a_t = Variable(torch.ones(batch_size).long() * self.model_actions.index('<start>'),
                     requires_grad=False).cuda()
         ended = np.array([False] * batch_size) # Indices match permuation of the model, not env
         a_t_em = torch.zeros(batch_size, self.model.input_action_size).long()
         a_t_em[:, self.model_actions.index('<start>')] = 1
+
         # global action and image tensor
         gt_actions = []
         batch_img = []
