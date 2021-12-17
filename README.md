@@ -1,6 +1,6 @@
 # TransformerVLN
 
-Our project use Matterport3D Simulator and Room-to-Room (R2R) Dataset [(Anderson et al., 2018)](https://arxiv.org/abs/1711.07280), so before running our code, you need to build an environment. 
+This is the code of project 'Transformer based model for Vision-and-Language Navigation'. Our project use Matterport3D Simulator and Room-to-Room (R2R) Dataset [(Anderson et al., 2018)](https://arxiv.org/abs/1711.07280), so before running our code, you need to build an environment. 
 
 
 
