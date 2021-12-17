@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from collections import defaultdict
 
-#from utils import read_vocab,write_vocab,build_vocab,Tokenizer,padding_idx,timeSince
+from utils import read_vocab,write_vocab,build_vocab,Tokenizer,padding_idx,timeSince
 from utils import timeSince
 from env import R2RBatch
 from model import EncoderLSTM, AttnDecoderLSTM, T5_Model, BERT_FC_Model, BERT_LSTM_Model
