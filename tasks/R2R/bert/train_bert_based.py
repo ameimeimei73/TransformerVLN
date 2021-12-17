@@ -113,11 +113,6 @@ def train(train_env, model, n_iters, log_every=2000, val_envs={}, model_type=Non
 def setup():
     torch.manual_seed(1)
     torch.cuda.manual_seed(1)
-    # Check for vocabs
-    if not os.path.exists(TRAIN_VOCAB):
-        write_vocab(build_vocab(splits=['train']), TRAIN_VOCAB)
-    if not os.path.exists(TRAINVAL_VOCAB):
-        write_vocab(build_vocab(splits=['train','val_seen','val_unseen']), TRAINVAL_VOCAB)
 
 def train_val():
     ''' Train on the training set, and validate on seen and unseen splits. '''
