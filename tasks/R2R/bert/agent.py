@@ -15,6 +15,7 @@ from torch import optim
 import torch.nn.functional as F
 from transformers import T5Tokenizer, BertTokenizer
 from env import R2RBatch
+# from utils import padding_idx
 from tqdm import tqdm
 
 tok = BertTokenizer.from_pretrained("bert-base-uncased")

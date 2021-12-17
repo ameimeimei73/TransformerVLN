@@ -17,8 +17,8 @@ class CustomT5Model(nn.Module):
 
         # Change beam search to greedy search
         self.base_model.config.num_beams = 1
-        self.decoder_input = nn.Linear(in_features=self.input_action_size + image_feature_size, out_features=768)
-        self.dense = nn.Linear(in_features=768, out_features=self.num_labels)
+        self.decoder_input = nn.Linear(in_features=self.input_action_size + image_feature_size, out_features=512)
+        self.dense = nn.Linear(in_features=512, out_features=self.num_labels)
         # self.relu = nn.ReLU()
 
     def forward(self, input_ids, attn_mask, actions, image_features):

@@ -10,6 +10,8 @@ import time
 import numpy as np
 import pandas as pd
 from collections import defaultdict
+
+#from utils import read_vocab,write_vocab,build_vocab,Tokenizer,padding_idx,timeSince
 from utils import timeSince
 from env import R2RBatch
 from model import EncoderLSTM, AttnDecoderLSTM, T5_Model, BERT_FC_Model, BERT_LSTM_Model
@@ -41,13 +43,10 @@ n_iters = 50000 if feedback_method == 'teacher' else 20000
 model_prefix = 'seq2seq_%s_imagenet' % (feedback_method)
 
 from transformers import BertTokenizer
-import sys
 
 tok = BertTokenizer.from_pretrained("bert-base-uncased")
 tok.padding_side = "right"
 padding_id = tok.pad_token_id
-
-our_model = sys.argv[1]
 
 def train(train_env, model, n_iters, log_every=2000, val_envs={}, model_type=None):
     ''' Train on training set, validating on both seen and unseen. '''
@@ -113,24 +112,59 @@ def train(train_env, model, n_iters, log_every=2000, val_envs={}, model_type=Non
 def setup():
     torch.manual_seed(1)
     torch.cuda.manual_seed(1)
+    # Check for vocabs
+    if not os.path.exists(TRAIN_VOCAB):
+        write_vocab(build_vocab(splits=['train']), TRAIN_VOCAB)
+    if not os.path.exists(TRAINVAL_VOCAB):
+        write_vocab(build_vocab(splits=['train','val_seen','val_unseen']), TRAINVAL_VOCAB)
+
+
+def test_submission():
+    ''' Train on combined training and validation sets, and generate test submission. '''
+
+    setup()
+    # Create a batch training environment that will also preprocess text
+    vocab = read_vocab(TRAINVAL_VOCAB)
+    tok = Tokenizer(vocab=vocab, encoding_length=MAX_INPUT_LENGTH)
+    train_env = R2RBatch(features, batch_size=batch_size, splits=['train', 'val_seen', 'val_unseen'], tokenizer=tok)
+
+    # Build models and train
+    enc_hidden_size = hidden_size//2 if bidirectional else hidden_size
+    encoder = EncoderLSTM(len(vocab), word_embedding_size, enc_hidden_size, padding_idx,
+                  dropout_ratio, bidirectional=bidirectional).cuda()
+    decoder = AttnDecoderLSTM(Seq2SeqAgent.n_inputs(), Seq2SeqAgent.n_outputs(),
+                  action_embedding_size, hidden_size, dropout_ratio).cuda()
+    train(train_env, encoder, decoder, n_iters)
+
+    # Generate test submission
+    test_env = R2RBatch(features, batch_size=batch_size, splits=['test'], tokenizer=tok)
+    agent = Seq2SeqAgent(test_env, "", encoder, decoder, max_episode_len)
+    agent.results_path = '%s%s_%s_iter_%d.json' % (RESULT_DIR, model_prefix, 'test', 20000)
+    agent.test(use_dropout=False, feedback='argmax')
+    agent.write_results()
+
 
 def train_val():
     ''' Train on the training set, and validate on seen and unseen splits. '''
 
     setup()
     # Create a batch training environment that will also preprocess text
+    #vocab = read_vocab(TRAIN_VOCAB)
+    #tok = Tokenizer(vocab=vocab, encoding_length=MAX_INPUT_LENGTH)
     train_env = R2RBatch(features, batch_size=batch_size, splits=['train'], tokenizer=tok)
 
-    # Creat validation and test environments
+    # Creat validation environments
     val_envs = {split: (R2RBatch(features, batch_size=batch_size, splits=[split],
                 tokenizer=tok), Evaluation([split])) for split in ['val_seen', 'val_unseen']}
 
 
+    our_model = 'BERT+LSTM' # 'BERT+LSTM' or 'BERT+FC'
+
     # Build models and train
-    if our_model == 'BERT_FC':
+    if our_model == 'BERT+FC':
         print ("Build BERT+FC model ...")
         model = BERT_FC_Model(Seq2SeqAgent.n_inputs(), Seq2SeqAgent.n_outputs(), 2048)
-    elif our_model == 'BERT_LSTM':
+    elif our_model == 'BERT+LSTM':
         print ("Build BERT+LSTM model ...")
         model = BERT_LSTM_Model(Seq2SeqAgent.n_inputs(), Seq2SeqAgent.n_outputs(), 
                 action_embedding_size, hidden_size, dropout_ratio)
@@ -142,3 +176,4 @@ def train_val():
 
 if __name__ == "__main__":
     train_val()
+    #test_submission()
